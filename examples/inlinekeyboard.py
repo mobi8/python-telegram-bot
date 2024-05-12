@@ -1,69 +1,95 @@
-#!/usr/bin/env python
-# pylint: disable=unused-argument
-# This program is dedicated to the public domain under the CC0 license.
+from typing import Final
 
-"""
-Basic example for a bot that uses inline keyboards. For an in-depth explanation, check out
- https://github.com/python-telegram-bot/python-telegram-bot/wiki/InlineKeyboard-Example.
-"""
-import logging
+# pip install python-telegram-bot
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+print('Starting up bot...')
 
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-# set higher logging level for httpx to avoid all GET and POST requests being logged
-logging.getLogger("httpx").setLevel(logging.WARNING)
-
-logger = logging.getLogger(__name__)
+TOKEN: Final = '6934946956:AAGBtThIVYk2kalQBi0mDCCxXRJly9mZ8vI'
+BOT_USERNAME: Final = '@rollkrypt'
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a message with three inline buttons attached."""
+# Lets us use the /start command
+async def start_command(update: Update, context: CallbackContext):
     keyboard = [
-        [
-            InlineKeyboardButton("Option 1", callback_data="1"),
-            InlineKeyboardButton("Option 2", callback_data="2"),
-        ],
-        [InlineKeyboardButton("Option 3", callback_data="3")],
+        [InlineKeyboardButton("Option 1", callback_data='1'),
+         InlineKeyboardButton("Option 2", callback_data='2')],
+        [InlineKeyboardButton("Option 3", callback_data='3')]
     ]
-
     reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text('******this is rollkrypt******', reply_markup=reply_markup)
 
-    await update.message.reply_text("Please choose:", reply_markup=reply_markup)
-
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Parses the CallbackQuery and updates the message text."""
-    query = update.callback_query
-
-    # CallbackQueries need to be answered, even if no notification to the user is needed
-    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    await query.answer()
-
-    await query.edit_message_text(text=f"Selected option: {query.data}")
+# Lets us use the /help command
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('Try typing anything and I will do my best to respond!')
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Displays info on how to use the bot."""
-    await update.message.reply_text("Use /start to test this bot.")
+# Lets us use the /custom command
+async def custom_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('This is a custom command, you can add whatever text you want here.')
 
 
-def main() -> None:
-    """Run the bot."""
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token("TOKEN").build()
+def handle_response(text: str) -> str:
+    # Create your own response logic
+    processed: str = text.lower()
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button))
-    application.add_handler(CommandHandler("help", help_command))
+    if 'hello' in processed:
+        return 'Hey there!'
 
-    # Run the bot until the user presses Ctrl-C
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    if 'how are you' in processed:
+        return 'I\'m good!'
+
+    if 'i love python' in processed:
+        return 'Remember to subscribe!'
+
+    return 'I don\'t understand'
 
 
-if __name__ == "__main__":
-    main()
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Get basic info of the incoming message
+    message_type: str = update.message.chat.type
+    text: str = update.message.text
+
+    # Print a log for debugging
+    print(f'User ({update.message.chat.id}) in {message_type}: "{text}"')
+
+    # React to group messages only if users mention the bot directly
+    if message_type == 'group':
+        # Replace with your bot username
+        if BOT_USERNAME in text:
+            new_text: str = text.replace(BOT_USERNAME, '').strip()
+            response: str = handle_response(new_text)
+        else:
+            return  # We don't want the bot respond if it's not mentioned in the group
+    else:
+        response: str = handle_response(text)
+
+    # Reply normal if the message is in private
+    print('Bot:', response)
+    await update.message.reply_text(response)
+
+
+# Log errors
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f'Update {update} caused error {context.error}')
+
+
+# Run the program
+if __name__ == '__main__':
+    app = Application.builder().token(TOKEN).build()
+
+    # Commands
+    app.add_handler(CommandHandler('start', start_command))
+    app.add_handler(CommandHandler('help', help_command))
+    app.add_handler(CommandHandler('custom', custom_command))
+
+    # Messages
+    app.add_handler(MessageHandler(filters.TEXT, handle_message))
+
+    # Log all errors
+    app.add_error_handler(error)
+
+    print('Polling...')
+    # Run the bot
+    app.run_polling(poll_interval=5)
